@@ -41,9 +41,10 @@ select, button {
 
 #game-area {
   position: relative;
-  height: 50vh;
+  height: calc(100vh - 170px);
   border-top: 2px solid #ddd;
   overflow: hidden;
+  padding-bottom: 190px; /* ⭐ 給九宮格讓位 */
 }
 
 .falling-word {
@@ -181,7 +182,7 @@ function nextWord() {
   dropWord(currentChar);
 }
 
-/* ====== 掉落動畫 ====== */
+/* ====== 掉落動畫（修正版 v6.3 穩定） ====== */
 function dropWord(char) {
   const gameArea = document.getElementById("game-area");
   gameArea.innerHTML = "";
@@ -193,20 +194,31 @@ function dropWord(char) {
 
   let top = 0;
   let writerStarted = false;
+  let finished = false;
+
+  const gameHeight = gameArea.clientHeight;
 
   const timer = setInterval(() => {
+    if (finished) {
+      clearInterval(timer);
+      return;
+    }
+
     top += BASE_SPEED * 10;
     div.style.top = top + "px";
 
-    // ⭐ 提早啟動九宮格（20% 高度）
-    if (top >= gameArea.clientHeight * 0.2 && !writerStarted) {
+    /* ⭐ 提早啟動九宮格（20% 高度） */
+    if (!writerStarted && top >= gameHeight * 0.2) {
       writerStarted = true;
       startWriting(char);
     }
 
-    // 掉到底（之後 v6.4 用來扣生命）
-    if (top >= gameArea.clientHeight - 40) {
+    /* ⭐ 掉到底（沒寫完） */
+    if (top >= gameHeight - 40) {
+      finished = true;
       clearInterval(timer);
+      document.getElementById("ngSound")?.play();
+      setTimeout(nextWord, 300);
     }
   }, 30);
 }
@@ -218,18 +230,18 @@ function startWriting(char) {
   writer = HanziWriter.create("hanzi-target", char, {
     width: 170,
     height: 170,
-    showOutline: true,
-    showCharacter: false,
-    strokeAnimationSpeed: 1,
-    delayBetweenStrokes: 200,
-    onComplete() {
-      document.getElementById("okSound").play();
-      setTimeout(nextWord, 400);
-    }
+    padding: 5,
+    showOutline: true
   });
 
-  writer.quiz();
+  writer.quiz({
+    onComplete: () => {
+      document.getElementById("okSound")?.play();
+      nextWord(); // ⭐⭐⭐ 關鍵
+    }
+  });
 }
+
 
 /* ====== 工具 ====== */
 function shuffle(arr) {
