@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>生字挑戰模式</title>
+
+<style>
+body {
+  margin: 0;
+  font-family: "Noto Sans TC", sans-serif;
+  background: #f5f5f5;
+}
+
+header {
+  padding: 10px;
+  background: #ff9800;
+  color: white;
+  text-align: center;
+  font-size: 20px;
+}
+
+#control {
+  padding: 10px;
+  text-align: center;
+}
+
+select, button {
+  font-size: 16px;
+  padding: 8px 12px;
+  margin: 5px;
+}
+
+#game {
+  display: flex;
+  height: calc(100vh - 120px);
+}
+
+#fallArea {
+  flex: 1;
+  position: relative;
+  background: #ffffff;
+  overflow: hidden;
+  border-right: 2px solid #ddd;
+}
+
+.fallingWord {
+  position: absolute;
+  font-size: 48px;
+  font-weight: bold;
+  top: -60px;
+}
+
+#writeArea {
+  width: 40%;
+  max-width: 300px;
+  background: #fafafa;
+  padding: 10px;
+}
+
+#targetChar {
+  text-align: center;
+  font-size: 48px;
+  margin-bottom: 10px;
+}
+
+canvas {
+  width: 100%;
+  height: 300px;
+  background: white;
+  border: 2px solid #ccc;
+  touch-action: none;
+}
+</style>
+</head>
+
+<body>
+
+<header>🎮 生字挑戰模式</header>
+
+<div id="control">
+  年級：
+  <select id="gradeSelect"></select>
+  <button onclick="startGame()">開始挑戰</button>
+</div>
+
+<div id="game">
+  <div id="fallArea"></div>
+
+  <div id="writeArea">
+    <div id="targetChar">準備</div>
+    <canvas id="canvas" width="300" height="300"></canvas>
+  </div>
+</div>
+
+<!-- 音效 -->
+<audio id="okSound" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
+<audio id="badSound" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"></audio>
+
+<script>
+/* ========= 設定 ========= */
+const GAS_URL = "https://script.google.com/macros/s/AKfycbzkgkyf-rTorN1OA-gfJ2ChRbcTHIqMVxikcNAf5IS9Wy3Iiabw5X52IgWbC7C2rQt9/exec";
+const WORDS_PER_GAME = 10;
+const FALL_INTERVAL = 2500;   // 掉落間隔（越大越慢）
+const FALL_SPEED = 0.3;       // 掉落速度（px / frame）
+
+/* ========= 狀態 ========= */
+let allData = {};
+let gameWords = [];
+let currentIndex = 0;
+let falling = [];
+let gameRunning = false;
+
+/* ========= 初始化 ========= */
+fetch(GAS_URL)
+  .then(res => res.json())
+  .then(data => {
+    allData = data;
+    const select = document.getElementById("gradeSelect");
+    Object.keys(data).forEach(g => {
+      const opt = document.createElement("option");
+      opt.value = g;
+      opt.textContent = g;
+      select.appendChild(opt);
+    });
+  });
+
+/* ========= 開始遊戲 ========= */
+function startGame() {
+  const grade = gradeSelect.value;
+  const pool = [...allData[grade]];
+  shuffle(pool);
+  gameWords = pool.slice(0, WORDS_PER_GAME);
+  currentIndex = 0;
+  falling = [];
+  gameRunning = true;
+  fallArea.innerHTML = "";
+  nextTarget();
+  spawnLoop();
+}
+
+/* ========= 掉落 ========= */
+function spawnLoop() {
+  if (!gameRunning) return;
+  if (currentIndex < gameWords.length) {
+    spawnWord(gameWords[currentIndex]);
+  }
+  setTimeout(spawnLoop, FALL_INTERVAL);
+}
+
+function spawnWord(char) {
+  const div = document.createElement("div");
+  div.className = "fallingWord";
+  div.textContent = char;
+  div.style.left = Math.random() * 70 + "%";
+  fallArea.appendChild(div);
+  falling.push({el: div, y: -60, char});
+}
+
+function animate() {
+  falling.forEach(f => {
+    f.y += FALL_SPEED;
+    f.el.style.top = f.y + "px";
+  });
+  requestAnimationFrame(animate);
+}
+animate();
+
+/* ========= 題目 ========= */
+function nextTarget() {
+  if (currentIndex >= gameWords.length) {
+    gameRunning = false;
+    alert("全部完成，做得好！");
+    return;
+  }
+  targetChar.textContent = gameWords[currentIndex];
+  clearCanvas();
+}
+
+/* ========= 筆寫 ========= */
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+let drawing = false;
+
+canvas.addEventListener("pointerdown", e => {
+  drawing = true;
+  ctx.beginPath();
+  ctx.moveTo(e.offsetX, e.offsetY);
+});
+canvas.addEventListener("pointermove", e => {
+  if (!drawing) return;
+  ctx.lineTo(e.offsetX, e.offsetY);
+  ctx.stroke();
+});
+canvas.addEventListener("pointerup", () => {
+  drawing = false;
+  checkAnswer();
+});
+
+function checkAnswer() {
+  const target = gameWords[currentIndex];
+  const hitIndex = falling.findIndex(f => f.char === target);
+  if (hitIndex >= 0) {
+    okSound.play();
+    fallArea.removeChild(falling[hitIndex].el);
+    falling.splice(hitIndex, 1);
+    currentIndex++;
+    nextTarget();
+  } else {
+    badSound.play();
+  }
+}
+
+function clearCanvas() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+/* ========= 工具 ========= */
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+</script>
+
+</body>
+</html>
