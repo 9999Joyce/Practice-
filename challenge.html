@@ -78,8 +78,13 @@ canvas {
 
 <header>🎮 生字挑戰模式</header>
 
-<div id="control">
-  年級：
+<div id="control-panel" style="
+  position: relative;
+  z-index: 1000;
+  background: white;
+  padding: 10px;
+  border-radius: 10px;
+">
   <select id="gradeSelect"></select>
   <button onclick="startGame()">開始挑戰</button>
 </div>
