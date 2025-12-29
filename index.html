@@ -154,7 +154,7 @@ const TEST_WORDS = ["山", "水", "火", "木", "人", "口"];
 let queue = [];
 let currentChar = "";
 let fallY = 0;
-let fallSpeed = 0.25; // 掉落速度
+let fallSpeed = 0.08; // 掉落速度
 let falling = false;
 let miss = 0;
 let writer = null;
@@ -183,7 +183,11 @@ function startGame() {
 function nextWord() {
   cancelAnimationFrame(animationId);
   fallArea.innerHTML = "";
-  if (writer) writer = null;
+
+// 正確清空上一個筆順區
+const writerDiv = document.getElementById("writer");
+writerDiv.innerHTML = "";
+writer = null;
 
   if (queue.length === 0) {
     statusEl.innerText = "🎉 全部完成！你贏了！";
@@ -255,3 +259,4 @@ function shuffle(arr) {
 
 </body>
 </html>
+
