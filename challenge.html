@@ -167,3 +167,125 @@ function startGame() {
       row["生字"].split("").forEach(ch => {
         if (/[\u4e00-\u9fa5]/.test(ch)) {
           wordsQueue.push(ch);
+        }
+      });
+    }
+  });
+
+  shuffle(wordsQueue);
+  nextWord();
+}
+
+/* ===== 下一題 ===== */
+function nextWord() {
+  clearWriter();
+
+  if (wordsQueue.length === 0) {
+    showMessage("🎉 全部完成，做得好！");
+    return;
+  }
+
+  spawnFallingChar(wordsQueue.shift());
+}
+
+/* ===== 掉字 ===== */
+function spawnFallingChar(char) {
+  const area = document.getElementById("game-area");
+
+  fallingEl = document.createElement("div");
+  fallingEl.className = "falling-word";
+  fallingEl.textContent = char;
+  area.appendChild(fallingEl);
+
+  createWriter(char);
+
+  let top = 0;
+  fallTimer = setInterval(() => {
+    top += FALL_SPEED;
+    fallingEl.style.top = top + "px";
+
+    if (top > area.clientHeight) {
+      clearInterval(fallTimer);
+      fallingEl.remove();
+      loseLife();
+      nextWord();
+    }
+  }, 16);
+}
+
+/* ===== HanziWriter ===== */
+function createWriter(char) {
+  writer = HanziWriter.create("hanzi-target", char, {
+    width: 170,
+    height: 170,
+    padding: 5,
+    showOutline: true,
+    drawingWidth: 14,
+    showHintAfterMisses: 1
+  });
+
+  writer.quiz({
+    onComplete: () => {
+      sndCorrect.currentTime = 0;
+      sndCorrect.play();
+
+      clearInterval(fallTimer);
+      fallingEl.remove();
+      setTimeout(nextWord, 400);
+    }
+  });
+}
+
+function clearWriter() {
+  if (writer) {
+    writer.cancelQuiz();
+    writer = null;
+    document.getElementById("hanzi-target").innerHTML = "";
+  }
+}
+
+/* ===== 生命值 ===== */
+function loseLife() {
+  lives--;
+  sndWrong.currentTime = 0;
+  sndWrong.play();
+
+  document.getElementById("lives").textContent = lives;
+
+  if (lives <= 0) {
+    gameOver();
+  }
+}
+
+function resetGame() {
+  lives = 3;
+  wordsQueue = [];
+  document.getElementById("lives").textContent = lives;
+  document.getElementById("message").style.display = "none";
+  clearInterval(fallTimer);
+  if (fallingEl) fallingEl.remove();
+  clearWriter();
+}
+
+function gameOver() {
+  showMessage("💔 挑戰失敗，再試一次！");
+  clearInterval(fallTimer);
+}
+
+/* ===== 工具 ===== */
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+function showMessage(text) {
+  const msg = document.getElementById("message");
+  msg.textContent = text;
+  msg.style.display = "block";
+}
+</script>
+
+</body>
+</html>
