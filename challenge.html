@@ -1,83 +1,75 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="zh-Hant">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>生字挑戰模式</title>
 
-<script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.5/dist/hanzi-writer.min.js"></script>
-
 <style>
-  body {
-    margin: 0;
-    font-family: "Microsoft JhengHei", sans-serif;
-    background: #e0f7fa;
-    overflow: hidden;
-  }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI";
+  background: #f5f7fb;
+  overflow: hidden;
+}
 
-  header {
-    background: #0097a7;
-    color: white;
-    padding: 10px;
-    text-align: center;
-    font-size: 20px;
-    font-weight: bold;
-  }
+header {
+  text-align: center;
+  padding: 12px;
+  font-size: 20px;
+  font-weight: bold;
+}
 
-  /* ===== 控制區（一定要在最上層） ===== */
-  #control-panel {
-    position: relative;
-    z-index: 1000;
-    background: white;
-    padding: 10px;
-    text-align: center;
-  }
+#control-panel {
+  text-align: center;
+  margin-bottom: 10px;
+}
 
-  select, button {
-    font-size: 16px;
-    padding: 6px 10px;
-    margin: 5px;
-  }
+select, button {
+  font-size: 16px;
+  padding: 6px 12px;
+  margin: 4px;
+}
 
-  /* ===== 掉字區 ===== */
-  #game-area {
-    position: absolute;
-    top: 90px;
-    left: 0;
-    width: 100%;
-    height: calc(100% - 90px);
-    overflow: hidden;
-    pointer-events: none; /* 關鍵：不吃事件 */
-  }
+#game-area {
+  position: relative;
+  height: calc(100vh - 120px);
+  border-top: 2px solid #ddd;
+}
 
-  .falling-char {
-    position: absolute;
-    font-size: 36px;
-    font-weight: bold;
-    color: #006064;
-  }
+.falling-word {
+  position: absolute;
+  top: 0;
+  font-size: 36px;
+  font-weight: bold;
+  left: 50%;
+  transform: translateX(-50%);
+}
 
-  /* ===== 寫字區 ===== */
-  #writer-area {
-    position: fixed;
-    right: 10px;
-    bottom: 10px;
-    width: 260px;
-    height: 260px;
-    background: white;
-    border: 4px solid #0097a7;
-    z-index: 500;
-  }
+#write-area {
+  position: fixed;
+  right: 10px;
+  bottom: 10px;
+  width: 160px;
+  height: 160px;
+  border: 2px dashed #999;
+  background: white;
+}
 
-  #status {
-    position: fixed;
-    left: 10px;
-    bottom: 20px;
-    font-size: 18px;
-    font-weight: bold;
-    color: #006064;
-    z-index: 500;
-  }
+canvas {
+  width: 100%;
+  height: 100%;
+}
+
+#message {
+  position: fixed;
+  top: 45%;
+  width: 100%;
+  text-align: center;
+  font-size: 26px;
+  font-weight: bold;
+  display: none;
+}
 </style>
 </head>
 
@@ -86,138 +78,148 @@
 <header>🎮 生字挑戰模式</header>
 
 <div id="control-panel">
-  <select id="gradeSelect"></select>
+  <select id="gradeSelect">
+    <option value="">請選擇年級</option>
+  </select>
   <button onclick="startGame()">開始挑戰</button>
 </div>
 
 <div id="game-area"></div>
-<div id="writer-area"></div>
-<div id="status">請選擇年級</div>
+
+<div id="write-area">
+  <canvas id="canvas"></canvas>
+</div>
+
+<div id="message"></div>
 
 <script>
 /* ==============================
-   ★★★ 在這裡貼上你的 GAS URL ★★★
-================================ */
-const GAS_URL = "https://script.google.com/macros/s/AKfycbxidqajTK3-sSxz7iA0Py1K5qsox1-8ELKotZzAKJYH09SMIXjWUb6PYdvqaHNauEv1/exec";
+   ❶ 貼上你的 GAS Web App URL
+   ============================== */
+const GAS_URL = "https://script.google.com/macros/s/AKfycbw7q7YMjF3a82-1NeNSV8kcc1j8u8PUv6PaEcb5rvnEWR_FZx-kUeaxchn3pbt1wazU/exec";
 
-/* ===== 全域變數 ===== */
-let database = {};
-let wordsPool = [];
-let currentChar = null;
-let writer = null;
-let fallingTimer = null;
+/* ============================== */
 
-/* ===== 讀取資料 ===== */
-fetch(GAS_URL)
-  .then(res => res.text())
-  .then(text => {
-    if (!text || text.length < 10) {
-      document.getElementById("status").innerText = "❌ GAS 沒有回資料";
-      return;
-    }
+let allData = {};
+let wordsQueue = [];
+let currentWord = null;
+let fallingEl = null;
+let fallTimer = null;
+let speed = 0.3; // 已調慢，手機也能寫
 
-    document.getElementById("status").innerText =
-      "✅ 已收到資料，長度：" + text.length;
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+resizeCanvas();
 
-    const data = JSON.parse(text);
-    database = data;
-    initGradeSelect();
+window.addEventListener("resize", resizeCanvas);
 
-    document.getElementById("status").innerText =
-      "✅ 年級數：" + Object.keys(database).length;
-  })
-  .catch(err => {
-    document.getElementById("status").innerText =
-      "❌ 解析失敗：" + err.message;
-  });
-
-
-/* ===== 初始化年級（＝孩子） ===== */
-function initGradeSelect() {
-  const sel = document.getElementById("gradeSelect");
-  sel.innerHTML = "";
-  Object.keys(database).forEach(child => {
-    const opt = document.createElement("option");
-    opt.value = child;
-    opt.textContent = child;
-    sel.appendChild(opt);
-  });
+function resizeCanvas() {
+  canvas.width = canvas.offsetWidth;
+  canvas.height = canvas.offsetHeight;
 }
+
+/* ===== 載入資料 ===== */
+fetch(GAS_URL)
+  .then(r => r.json())
+  .then(data => {
+    allData = data;
+    const select = document.getElementById("gradeSelect");
+    Object.keys(allData).forEach(g => {
+      const opt = document.createElement("option");
+      opt.value = g;
+      opt.textContent = g;
+      select.appendChild(opt);
+    });
+  })
+  .catch(() => {
+    alert("資料讀取失敗");
+  });
 
 /* ===== 開始遊戲 ===== */
 function startGame() {
-  clearInterval(fallingTimer);
-  document.getElementById("game-area").innerHTML = "";
+  clearGame();
 
   const grade = document.getElementById("gradeSelect").value;
-  wordsPool = [];
-
-  Object.values(database[grade]).forEach(semester =>
-    Object.values(semester).forEach(lesson => {
-      lesson.split("").forEach(c => {
-        if (/[\u4e00-\u9fa5]/.test(c)) wordsPool.push(c);
-      });
-    })
-  );
-
-  shuffle(wordsPool);
-  nextChar();
-}
-
-/* ===== 下一個字 ===== */
-function nextChar() {
-  if (wordsPool.length === 0) {
-    document.getElementById("status").innerText = "🎉 全部完成，做得好！";
-    clearInterval(fallingTimer);
+  if (!grade) {
+    alert("請先選擇年級");
     return;
   }
 
-  currentChar = wordsPool.shift();
-  document.getElementById("status").innerText = `請寫：${currentChar}`;
-  startFalling(currentChar);
-  startWriter(currentChar);
+  wordsQueue = [...allData[grade]];
+  shuffle(wordsQueue);
+  nextWord();
 }
 
-/* ===== 掉落動畫（慢速） ===== */
-function startFalling(char) {
-  const game = document.getElementById("game-area");
-  const div = document.createElement("div");
-  div.className = "falling-char";
-  div.innerText = char;
-  div.style.left = Math.random() * (window.innerWidth - 50) + "px";
-  div.style.top = "0px";
-  game.appendChild(div);
+/* ===== 出下一題 ===== */
+function nextWord() {
+  clearCanvas();
+
+  if (wordsQueue.length === 0) {
+    showMessage("🎉 全部完成，做得好！");
+    return;
+  }
+
+  currentWord = wordsQueue.shift().生字;
+  spawnWord(currentWord);
+}
+
+/* ===== 掉字 ===== */
+function spawnWord(char) {
+  fallingEl = document.createElement("div");
+  fallingEl.className = "falling-word";
+  fallingEl.textContent = char;
+  document.getElementById("game-area").appendChild(fallingEl);
 
   let top = 0;
-  fallingTimer = setInterval(() => {
-    top += 0.3;   // ★ 已放慢（手機友善）
-    div.style.top = top + "px";
+  fallTimer = setInterval(() => {
+    top += speed;
+    fallingEl.style.top = top + "px";
+
     if (top > window.innerHeight) {
-      clearInterval(fallingTimer);
-      game.removeChild(div);
-      nextChar();
+      clearInterval(fallTimer);
+      fallingEl.remove();
+      nextWord();
     }
-  }, 20);
+  }, 16);
 }
 
-/* ===== 寫字 ===== */
-function startWriter(char) {
-  document.getElementById("writer-area").innerHTML = "";
-  writer = HanziWriter.create("writer-area", char, {
-    width: 260,
-    height: 260,
-    padding: 5,
-    showOutline: true,
-    strokeAnimationSpeed: 1
-  });
+/* ===== 繪圖區 ===== */
+let drawing = false;
 
-  writer.quiz({
-    onComplete: () => {
-      clearInterval(fallingTimer);
-      document.getElementById("game-area").innerHTML = "";
-      nextChar();
-    }
-  });
+canvas.addEventListener("pointerdown", e => {
+  drawing = true;
+  ctx.beginPath();
+  ctx.moveTo(e.offsetX, e.offsetY);
+});
+
+canvas.addEventListener("pointermove", e => {
+  if (!drawing) return;
+  ctx.lineTo(e.offsetX, e.offsetY);
+  ctx.stroke();
+});
+
+canvas.addEventListener("pointerup", finishDraw);
+canvas.addEventListener("pointerleave", finishDraw);
+
+function finishDraw() {
+  if (!drawing) return;
+  drawing = false;
+
+  // 暫時用「有寫就算成功」
+  clearInterval(fallTimer);
+  fallingEl.remove();
+  setTimeout(nextWord, 400);
+}
+
+function clearCanvas() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function clearGame() {
+  clearInterval(fallTimer);
+  if (fallingEl) fallingEl.remove();
+  clearCanvas();
+  document.getElementById("message").style.display = "none";
 }
 
 /* ===== 工具 ===== */
@@ -226,6 +228,12 @@ function shuffle(arr) {
     const j = Math.floor(Math.random() * (i + 1));
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
+}
+
+function showMessage(text) {
+  const msg = document.getElementById("message");
+  msg.textContent = text;
+  msg.style.display = "block";
 }
 </script>
 
