@@ -143,6 +143,10 @@
 </div>
 
 <script>
+  // 音效
+const soundCorrect = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
+const soundMiss = new Audio("https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg");
+
 /* =========================
    Phase 2｜B 測試模式資料
    ========================= */
@@ -154,7 +158,7 @@ const TEST_WORDS = ["山", "水", "火", "木", "人", "口"];
 let queue = [];
 let currentChar = "";
 let fallY = 0;
-let fallSpeed = 0.08; // 掉落速度
+let fallSpeed = 0.05; // 掉落速度
 let falling = false;
 let miss = 0;
 let writer = null;
@@ -190,7 +194,7 @@ writerDiv.innerHTML = "";
 writer = null;
 
   if (queue.length === 0) {
-    statusEl.innerText = "🎉 全部完成！你贏了！";
+    statusEl.innerText = "🎉 全部完成，做得好！";
     return;
   }
 
@@ -217,11 +221,13 @@ writer = null;
 
   writer.quiz({
     onComplete: () => {
-      falling = false;
-      statusEl.innerText = "✔ 正確！";
-      fallArea.innerHTML = "";
-      setTimeout(nextWord, 500);
-    }
+  falling = false;
+  soundCorrect.currentTime = 0;
+  soundCorrect.play();
+  statusEl.innerText = "✔ 正確！";
+  fallArea.innerHTML = "";
+  setTimeout(nextWord, 500);
+}
   });
 
   function animate() {
@@ -231,13 +237,15 @@ writer = null;
     charDiv.style.top = fallY + "px";
 
     if (fallY + charDiv.offsetHeight >= fallArea.clientHeight) {
-      falling = false;
-      miss++;
-      missEl.innerText = miss;
-      statusEl.innerText = "❌ 太慢了！";
-      setTimeout(nextWord, 500);
-      return;
-    }
+  falling = false;
+  miss++;
+  missEl.innerText = miss;
+  soundMiss.currentTime = 0;
+  soundMiss.play();
+  statusEl.innerText = "❌ 太慢了！";
+  setTimeout(nextWord, 500);
+  return;
+}
 
     animationId = requestAnimationFrame(animate);
   }
@@ -259,4 +267,5 @@ function shuffle(arr) {
 
 </body>
 </html>
+
 
