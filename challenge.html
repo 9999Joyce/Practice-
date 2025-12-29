@@ -1,76 +1,83 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-TW">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>生字挑戰模式</title>
 
+<script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.5/dist/hanzi-writer.min.js"></script>
+
 <style>
-body {
-  margin: 0;
-  font-family: "Noto Sans TC", sans-serif;
-  background: #f5f5f5;
-}
+  body {
+    margin: 0;
+    font-family: "Microsoft JhengHei", sans-serif;
+    background: #e0f7fa;
+    overflow: hidden;
+  }
 
-header {
-  padding: 10px;
-  background: #ff9800;
-  color: white;
-  text-align: center;
-  font-size: 20px;
-}
+  header {
+    background: #0097a7;
+    color: white;
+    padding: 10px;
+    text-align: center;
+    font-size: 20px;
+    font-weight: bold;
+  }
 
-#control {
-  padding: 10px;
-  text-align: center;
-}
+  /* ===== 控制區（一定要在最上層） ===== */
+  #control-panel {
+    position: relative;
+    z-index: 1000;
+    background: white;
+    padding: 10px;
+    text-align: center;
+  }
 
-select, button {
-  font-size: 16px;
-  padding: 8px 12px;
-  margin: 5px;
-}
+  select, button {
+    font-size: 16px;
+    padding: 6px 10px;
+    margin: 5px;
+  }
 
-#game {
-  display: flex;
-  height: calc(100vh - 120px);
-}
+  /* ===== 掉字區 ===== */
+  #game-area {
+    position: absolute;
+    top: 90px;
+    left: 0;
+    width: 100%;
+    height: calc(100% - 90px);
+    overflow: hidden;
+    pointer-events: none; /* 關鍵：不吃事件 */
+  }
 
-#fallArea {
-  flex: 1;
-  position: relative;
-  background: #ffffff;
-  overflow: hidden;
-  border-right: 2px solid #ddd;
-}
+  .falling-char {
+    position: absolute;
+    font-size: 36px;
+    font-weight: bold;
+    color: #006064;
+  }
 
-.fallingWord {
-  position: absolute;
-  font-size: 48px;
-  font-weight: bold;
-  top: -60px;
-}
+  /* ===== 寫字區 ===== */
+  #writer-area {
+    position: fixed;
+    right: 10px;
+    bottom: 10px;
+    width: 260px;
+    height: 260px;
+    background: white;
+    border: 4px solid #0097a7;
+    z-index: 500;
+  }
 
-#writeArea {
-  width: 40%;
-  max-width: 300px;
-  background: #fafafa;
-  padding: 10px;
-}
-
-#targetChar {
-  text-align: center;
-  font-size: 48px;
-  margin-bottom: 10px;
-}
-
-canvas {
-  width: 100%;
-  height: 300px;
-  background: white;
-  border: 2px solid #ccc;
-  touch-action: none;
-}
+  #status {
+    position: fixed;
+    left: 10px;
+    bottom: 20px;
+    font-size: 18px;
+    font-weight: bold;
+    color: #006064;
+    z-index: 500;
+  }
 </style>
 </head>
 
@@ -78,149 +85,129 @@ canvas {
 
 <header>🎮 生字挑戰模式</header>
 
-<div id="control-panel" style="
-  position: relative;
-  z-index: 1000;
-  background: white;
-  padding: 10px;
-  border-radius: 10px;
-">
+<div id="control-panel">
   <select id="gradeSelect"></select>
   <button onclick="startGame()">開始挑戰</button>
 </div>
 
-<div id="game">
-  <div id="fallArea"></div>
-
-  <div id="writeArea">
-    <div id="targetChar">準備</div>
-    <canvas id="canvas" width="300" height="300"></canvas>
-  </div>
-</div>
-
-<!-- 音效 -->
-<audio id="okSound" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
-<audio id="badSound" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"></audio>
+<div id="game-area"></div>
+<div id="writer-area"></div>
+<div id="status">請選擇年級</div>
 
 <script>
-/* ========= 設定 ========= */
+/* ==============================
+   ★★★ 在這裡貼上你的 GAS URL ★★★
+================================ */
 const GAS_URL = "https://script.google.com/macros/s/AKfycbzkgkyf-rTorN1OA-gfJ2ChRbcTHIqMVxikcNAf5IS9Wy3Iiabw5X52IgWbC7C2rQt9/exec";
-const WORDS_PER_GAME = 10;
-const FALL_INTERVAL = 2500;   // 掉落間隔（越大越慢）
-const FALL_SPEED = 0.3;       // 掉落速度（px / frame）
 
-/* ========= 狀態 ========= */
-let allData = {};
-let gameWords = [];
-let currentIndex = 0;
-let falling = [];
-let gameRunning = false;
+/* ===== 全域變數 ===== */
+let database = {};
+let wordsPool = [];
+let currentChar = null;
+let writer = null;
+let fallingTimer = null;
 
-/* ========= 初始化 ========= */
+/* ===== 讀取資料 ===== */
 fetch(GAS_URL)
   .then(res => res.json())
   .then(data => {
-    allData = data;
-    const select = document.getElementById("gradeSelect");
-    Object.keys(data).forEach(g => {
-      const opt = document.createElement("option");
-      opt.value = g;
-      opt.textContent = g;
-      select.appendChild(opt);
-    });
+    database = data;
+    initGradeSelect();
+  })
+  .catch(err => {
+    document.getElementById("status").innerText = "資料讀取失敗";
+    console.error(err);
   });
 
-/* ========= 開始遊戲 ========= */
+/* ===== 初始化年級（＝孩子） ===== */
+function initGradeSelect() {
+  const sel = document.getElementById("gradeSelect");
+  sel.innerHTML = "";
+  Object.keys(database).forEach(child => {
+    const opt = document.createElement("option");
+    opt.value = child;
+    opt.textContent = child;
+    sel.appendChild(opt);
+  });
+}
+
+/* ===== 開始遊戲 ===== */
 function startGame() {
-  const grade = gradeSelect.value;
-  const pool = [...allData[grade]];
-  shuffle(pool);
-  gameWords = pool.slice(0, WORDS_PER_GAME);
-  currentIndex = 0;
-  falling = [];
-  gameRunning = true;
-  fallArea.innerHTML = "";
-  nextTarget();
-  spawnLoop();
+  clearInterval(fallingTimer);
+  document.getElementById("game-area").innerHTML = "";
+
+  const grade = document.getElementById("gradeSelect").value;
+  wordsPool = [];
+
+  Object.values(database[grade]).forEach(semester =>
+    Object.values(semester).forEach(lesson => {
+      lesson.split("").forEach(c => {
+        if (/[\u4e00-\u9fa5]/.test(c)) wordsPool.push(c);
+      });
+    })
+  );
+
+  shuffle(wordsPool);
+  nextChar();
 }
 
-/* ========= 掉落 ========= */
-function spawnLoop() {
-  if (!gameRunning) return;
-  if (currentIndex < gameWords.length) {
-    spawnWord(gameWords[currentIndex]);
-  }
-  setTimeout(spawnLoop, FALL_INTERVAL);
-}
-
-function spawnWord(char) {
-  const div = document.createElement("div");
-  div.className = "fallingWord";
-  div.textContent = char;
-  div.style.left = Math.random() * 70 + "%";
-  fallArea.appendChild(div);
-  falling.push({el: div, y: -60, char});
-}
-
-function animate() {
-  falling.forEach(f => {
-    f.y += FALL_SPEED;
-    f.el.style.top = f.y + "px";
-  });
-  requestAnimationFrame(animate);
-}
-animate();
-
-/* ========= 題目 ========= */
-function nextTarget() {
-  if (currentIndex >= gameWords.length) {
-    gameRunning = false;
-    alert("全部完成，做得好！");
+/* ===== 下一個字 ===== */
+function nextChar() {
+  if (wordsPool.length === 0) {
+    document.getElementById("status").innerText = "🎉 全部完成，做得好！";
+    clearInterval(fallingTimer);
     return;
   }
-  targetChar.textContent = gameWords[currentIndex];
-  clearCanvas();
+
+  currentChar = wordsPool.shift();
+  document.getElementById("status").innerText = `請寫：${currentChar}`;
+  startFalling(currentChar);
+  startWriter(currentChar);
 }
 
-/* ========= 筆寫 ========= */
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
-let drawing = false;
+/* ===== 掉落動畫（慢速） ===== */
+function startFalling(char) {
+  const game = document.getElementById("game-area");
+  const div = document.createElement("div");
+  div.className = "falling-char";
+  div.innerText = char;
+  div.style.left = Math.random() * (window.innerWidth - 50) + "px";
+  div.style.top = "0px";
+  game.appendChild(div);
 
-canvas.addEventListener("pointerdown", e => {
-  drawing = true;
-  ctx.beginPath();
-  ctx.moveTo(e.offsetX, e.offsetY);
-});
-canvas.addEventListener("pointermove", e => {
-  if (!drawing) return;
-  ctx.lineTo(e.offsetX, e.offsetY);
-  ctx.stroke();
-});
-canvas.addEventListener("pointerup", () => {
-  drawing = false;
-  checkAnswer();
-});
-
-function checkAnswer() {
-  const target = gameWords[currentIndex];
-  const hitIndex = falling.findIndex(f => f.char === target);
-  if (hitIndex >= 0) {
-    okSound.play();
-    fallArea.removeChild(falling[hitIndex].el);
-    falling.splice(hitIndex, 1);
-    currentIndex++;
-    nextTarget();
-  } else {
-    badSound.play();
-  }
+  let top = 0;
+  fallingTimer = setInterval(() => {
+    top += 0.3;   // ★ 已放慢（手機友善）
+    div.style.top = top + "px";
+    if (top > window.innerHeight) {
+      clearInterval(fallingTimer);
+      game.removeChild(div);
+      nextChar();
+    }
+  }, 20);
 }
 
-function clearCanvas() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+/* ===== 寫字 ===== */
+function startWriter(char) {
+  document.getElementById("writer-area").innerHTML = "";
+  writer = HanziWriter.create("writer-area", char, {
+    width: 260,
+    height: 260,
+    padding: 5,
+    showOutline: true,
+    strokeAnimationSpeed: 1
+  });
+
+  writer.quiz({
+    onComplete: () => {
+      clearInterval(fallingTimer);
+      document.getElementById("game-area").innerHTML = "";
+      nextChar();
+    }
+  });
 }
 
-/* ========= 工具 ========= */
+/* ===== 工具 ===== */
 function shuffle(arr) {
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
