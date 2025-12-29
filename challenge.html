@@ -109,15 +109,28 @@ let fallingTimer = null;
 
 /* ===== 讀取資料 ===== */
 fetch(GAS_URL)
-  .then(res => res.json())
-  .then(data => {
+  .then(res => res.text())
+  .then(text => {
+    if (!text || text.length < 10) {
+      document.getElementById("status").innerText = "❌ GAS 沒有回資料";
+      return;
+    }
+
+    document.getElementById("status").innerText =
+      "✅ 已收到資料，長度：" + text.length;
+
+    const data = JSON.parse(text);
     database = data;
     initGradeSelect();
+
+    document.getElementById("status").innerText =
+      "✅ 年級數：" + Object.keys(database).length;
   })
   .catch(err => {
-    document.getElementById("status").innerText = "資料讀取失敗";
-    console.error(err);
+    document.getElementById("status").innerText =
+      "❌ 解析失敗：" + err.message;
   });
+
 
 /* ===== 初始化年級（＝孩子） ===== */
 function initGradeSelect() {
