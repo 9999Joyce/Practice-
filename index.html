@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>雲端生字練習簿 v6</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- HanziWriter -->
+  <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.5/dist/hanzi-writer.min.js"></script>
+
+  <style>
+    body {
+      font-family: "Microsoft JhengHei", system-ui, sans-serif;
+      background: #e0f7fa;
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+    }
+    h2 { color: #00838f; }
+
+    .container {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 20px;
+      max-width: 900px;
+      margin: auto;
+    }
+
+    .card {
+      background: #fff;
+      padding: 20px;
+      border-radius: 14px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+
+    select {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 10px;
+      font-size: 16px;
+    }
+
+    .word-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+    }
+
+    .word-btn {
+      width: 44px;
+      height: 44px;
+      font-size: 22px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      background: #fff;
+      cursor: pointer;
+    }
+
+    .word-btn.active {
+      background: #00bcd4;
+      color: #fff;
+      border-color: #00bcd4;
+    }
+
+    .grid {
+      width: 300px;
+      height: 300px;
+      border: 4px solid #0097a7;
+      margin: auto;
+    }
+
+    .controls {
+      margin-top: 12px;
+    }
+
+    button {
+      padding: 10px 24px;
+      margin: 0 6px;
+      font-size: 16px;
+      border-radius: 24px;
+      border: none;
+      cursor: pointer;
+    }
+
+    .btn-demo { background: #b2ebf2; }
+    .btn-quiz { background: #00bcd4; color: #fff; }
+
+    #status {
+      margin-top: 12px;
+      font-weight: bold;
+      min-height: 24px;
+    }
+
+    #loading {
+      background: #fff3cd;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+    }
+  </style>
+</head>
+
+<body>
+
+<h2>雲端生字練習簿</h2>
+
+<div id="loading">正在連線至 Google 試算表…</div>
+
+<div class="container" id="app" style="display:none;">
+
+  <div class="card" style="max-width:320px;">
+    <select id="selChild"></select>
+    <select id="selSemester"></select>
+    <select id="selLesson"></select>
+    <div class="word-list" id="wordList"></div>
+  </div>
+
+  <div class="card">
+    <div class="grid" id="charBox"></div>
+    <div class="controls">
+      <button class="btn-demo" onclick="demo()">演示</button>
+      <button class="btn-quiz" onclick="startQuiz()">練習</button>
+    </div>
+    <div id="status">請選擇生字</div>
+  </div>
+
+</div>
+
+<script>
+/* ================= 請貼上你的 GAS Web App URL ================= */
+const GAS_URL = "https://script.google.com/macros/s/AKfycbzkgkyf-rTorN1OA-gfJ2ChRbcTHIqMVxikcNAf5IS9Wy3Iiabw5X52IgWbC7C2rQt9/exec";
+/* ============================================================ */
+
+let database = {};
+let writer = null;
+
+/* 讀取 GAS CSV */
+fetch(GAS_URL)
+  .then(r => r.text())
+  .then(csv => {
+    parseCSV(csv);
+    document.getElementById("loading").style.display = "none";
+    document.getElementById("app").style.display = "flex";
+    initUI();
+  })
+  .catch(err => {
+    document.getElementById("loading").innerText = "讀取失敗";
+    console.error(err);
+  });
+
+function parseCSV(csv) {
+  const rows = csv.split("\n").map(r => r.split(","));
+  for (let i = 1; i < rows.length; i++) {
+    const [child, semester, lesson, ...chars] =
+      rows[i].map(c => c.replace(/"/g, "").trim());
+    if (!child) continue;
+    database[child] ??= {};
+    database[child][semester] ??= {};
+    database[child][semester][lesson] = chars.join("");
+  }
+}
+
+/* UI */
+const selChild = document.getElementById("selChild");
+const selSemester = document.getElementById("selSemester");
+const selLesson = document.getElementById("selLesson");
+const wordList = document.getElementById("wordList");
+const status = document.getElementById("status");
+
+function initUI() {
+  fillSelect(selChild, Object.keys(database));
+  selChild.onchange = updateSemester;
+  selSemester.onchange = updateLesson;
+  selLesson.onchange = updateWords;
+  updateSemester();
+}
+
+function fillSelect(sel, arr) {
+  sel.innerHTML = "";
+  arr.forEach(v => sel.add(new Option(v, v)));
+}
+
+function updateSemester() {
+  fillSelect(selSemester, Object.keys(database[selChild.value] || {}));
+  updateLesson();
+}
+
+function updateLesson() {
+  fillSelect(
+    selLesson,
+    Object.keys(database[selChild.value][selSemester.value] || {})
+  );
+  updateWords();
+}
+
+function updateWords() {
+  wordList.innerHTML = "";
+  const chars =
+    database[selChild.value][selSemester.value][selLesson.value] || "";
+  [...chars].forEach((c, i) => {
+    const b = document.createElement("button");
+    b.className = "word-btn";
+    b.textContent = c;
+    b.onclick = () => loadChar(c, b);
+    wordList.appendChild(b);
+    if (i === 0) b.click();
+  });
+}
+
+function loadChar(char, btn) {
+  document.querySelectorAll(".word-btn")
+    .forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+
+  const box = document.getElementById("charBox");
+  box.innerHTML = "";
+
+  status.innerText = "練習：" + char;
+
+  writer = HanziWriter.create("charBox", char, {
+    width: 300,
+    height: 300,
+    padding: 5,
+    showOutline: true,
+    showCharacter: false,
+    drawingWidth: 20
+  });
+}
+
+function demo() {
+  if (writer) writer.animateCharacter();
+}
+
+function startQuiz() {
+  if (!writer) return;
+  status.innerText = "開始書寫…";
+  writer.quiz({
+    onCorrectStroke: () => status.innerText = "很好！下一筆",
+    onMistake: () => status.innerText = "寫錯了，看提示",
+    onComplete: () => status.innerText = "完成！"
+  });
+}
+</script>
+
+</body>
+</html>
