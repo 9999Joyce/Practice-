@@ -182,7 +182,7 @@ function nextWord() {
   dropWord(currentChar);
 }
 
-/* ====== 掉落動畫（修正版 v6.3 穩定） ====== */
+/* ====== 掉落動畫（v6.3 手感最佳版） ====== */
 function dropWord(char) {
   const gameArea = document.getElementById("game-area");
   gameArea.innerHTML = "";
@@ -192,10 +192,11 @@ function dropWord(char) {
   div.textContent = char;
   gameArea.appendChild(div);
 
-  let top = 0;
-  let writerStarted = false;
-  let finished = false;
+  // ⭐ 一出現就立刻更新九宮格
+  startWriting(char);
 
+  let top = 0;
+  let finished = false;
   const gameHeight = gameArea.clientHeight;
 
   const timer = setInterval(() => {
@@ -207,13 +208,7 @@ function dropWord(char) {
     top += BASE_SPEED * 10;
     div.style.top = top + "px";
 
-    /* ⭐ 提早啟動九宮格（20% 高度） */
-    if (!writerStarted && top >= gameHeight * 0.2) {
-      writerStarted = true;
-      startWriting(char);
-    }
-
-    /* ⭐ 掉到底（沒寫完） */
+    // 掉到底（沒寫完）
     if (top >= gameHeight - 40) {
       finished = true;
       clearInterval(timer);
