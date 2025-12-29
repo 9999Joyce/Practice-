@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>生字挑戰模式 v6.1</title>
+<title>生字挑戰模式 v6.2</title>
 
-<!-- ✅ HanziWriter（一定要有） -->
+<!-- HanziWriter -->
 <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.5/dist/hanzi-writer.min.js"></script>
 
 <style>
@@ -18,16 +18,16 @@ body {
 
 header {
   text-align: center;
-  padding: 12px;
+  padding: 10px;
   font-size: 20px;
   font-weight: bold;
 }
 
 #control-panel {
   text-align: center;
-  margin-bottom: 8px;
-  z-index: 1000;
+  margin-bottom: 6px;
   position: relative;
+  z-index: 1000;
 }
 
 select, button {
@@ -36,9 +36,15 @@ select, button {
   margin: 4px;
 }
 
+#status-bar {
+  text-align: center;
+  font-size: 18px;
+  margin-bottom: 4px;
+}
+
 #game-area {
   position: relative;
-  height: calc(100vh - 120px);
+  height: calc(100vh - 150px);
   border-top: 2px solid #ddd;
   overflow: hidden;
 }
@@ -91,6 +97,10 @@ select, button {
   <button onclick="startGame()">開始挑戰</button>
 </div>
 
+<div id="status-bar">
+  ❤️ 生命值：<span id="lives">3</span>
+</div>
+
 <div id="game-area"></div>
 
 <div id="write-area">
@@ -99,44 +109,52 @@ select, button {
 
 <div id="message"></div>
 
+<!-- 音效（使用免費線上音效） -->
+<audio id="sound-correct" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
+<audio id="sound-wrong" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"></audio>
+
 <script>
-/* =================================================
-   🔴【唯一要改的地方】貼上你的 GAS Web App URL
-   ================================================= */
+/* ==============================
+   🔴 貼上你的 GAS_URL
+   ============================== */
 const GAS_URL = "https://script.google.com/macros/s/AKfycbw7q7YMjF3a82-1NeNSV8kcc1j8u8PUv6PaEcb5rvnEWR_FZx-kUeaxchn3pbt1wazU/exec";
-/* ================================================= */
+/* ============================== */
 
 let allData = {};
 let wordsQueue = [];
-let currentChar = "";
 let fallingEl = null;
 let fallTimer = null;
 let writer = null;
 
-const FALL_SPEED = 0.25; // ✔ 已為手機調慢（比原本慢 3 倍）
+let lives = 3;
+const FALL_SPEED = 0.25;
 
-/* ===== 讀取 GAS JSON（手機/電腦通用）===== */
+/* ===== 音效 ===== */
+const sndCorrect = document.getElementById("sound-correct");
+const sndWrong = document.getElementById("sound-wrong");
+
+/* ===== 讀取資料 ===== */
 fetch(GAS_URL)
-  .then(res => res.text())
+  .then(r => r.text())
   .then(txt => {
     const jsonText = txt.substring(txt.indexOf("{"));
     allData = JSON.parse(jsonText);
 
     const sel = document.getElementById("gradeSelect");
-    Object.keys(allData).forEach(grade => {
+    Object.keys(allData).forEach(g => {
       const opt = document.createElement("option");
-      opt.value = grade;
-      opt.textContent = grade;
+      opt.value = g;
+      opt.textContent = g;
       sel.appendChild(opt);
     });
   })
   .catch(err => {
-    alert("❌ 資料讀取或解析失敗\n" + err.message);
+    alert("❌ 資料讀取失敗\n" + err.message);
   });
 
 /* ===== 開始遊戲 ===== */
 function startGame() {
-  clearGame();
+  resetGame();
 
   const grade = document.getElementById("gradeSelect").value;
   if (!grade) {
@@ -144,109 +162,8 @@ function startGame() {
     return;
   }
 
-  // 將該年級所有生字收集成陣列
-  wordsQueue = [];
   allData[grade].forEach(row => {
     if (row["生字"]) {
       row["生字"].split("").forEach(ch => {
         if (/[\u4e00-\u9fa5]/.test(ch)) {
           wordsQueue.push(ch);
-        }
-      });
-    }
-  });
-
-  shuffle(wordsQueue);
-  nextWord();
-}
-
-/* ===== 出下一題 ===== */
-function nextWord() {
-  clearWriter();
-
-  if (wordsQueue.length === 0) {
-    showMessage("🎉 全部完成，做得好！");
-    return;
-  }
-
-  currentChar = wordsQueue.shift();
-  spawnFallingChar(currentChar);
-  createWriter(currentChar);
-}
-
-/* ===== 掉落文字 ===== */
-function spawnFallingChar(char) {
-  const area = document.getElementById("game-area");
-
-  fallingEl = document.createElement("div");
-  fallingEl.className = "falling-word";
-  fallingEl.textContent = char;
-  area.appendChild(fallingEl);
-
-  let top = 0;
-  fallTimer = setInterval(() => {
-    top += FALL_SPEED;
-    fallingEl.style.top = top + "px";
-
-    if (top > area.clientHeight) {
-      clearInterval(fallTimer);
-      fallingEl.remove();
-      nextWord();
-    }
-  }, 16);
-}
-
-/* ===== HanziWriter 九宮格 ===== */
-function createWriter(char) {
-  writer = HanziWriter.create("hanzi-target", char, {
-    width: 170,
-    height: 170,
-    padding: 5,
-    showOutline: true,
-    drawingWidth: 14,
-    showHintAfterMisses: 1,
-    strokeAnimationSpeed: 1
-  });
-
-  writer.quiz({
-    onComplete: () => {
-      clearInterval(fallTimer);
-      if (fallingEl) fallingEl.remove();
-      setTimeout(nextWord, 400);
-    }
-  });
-}
-
-function clearWriter() {
-  if (writer) {
-    writer.cancelQuiz();
-    writer = null;
-    document.getElementById("hanzi-target").innerHTML = "";
-  }
-}
-
-/* ===== 清場 ===== */
-function clearGame() {
-  clearInterval(fallTimer);
-  if (fallingEl) fallingEl.remove();
-  clearWriter();
-  document.getElementById("message").style.display = "none";
-}
-
-/* ===== 工具 ===== */
-function shuffle(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-}
-
-function showMessage(text) {
-  const msg = document.getElementById("message");
-  msg.textContent = text;
-  msg.style.display = "block";
-}
-</script>
-
-</body>
-</html>
