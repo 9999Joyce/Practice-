@@ -192,13 +192,21 @@ function dropWord(char) {
   gameArea.appendChild(div);
 
   let top = 0;
+  let writerStarted = false;
+
   const timer = setInterval(() => {
     top += BASE_SPEED * 10;
     div.style.top = top + "px";
 
+    // ⭐ 提早啟動九宮格（20% 高度）
+    if (top >= gameArea.clientHeight * 0.2 && !writerStarted) {
+      writerStarted = true;
+      startWriting(char);
+    }
+
+    // 掉到底（之後 v6.4 用來扣生命）
     if (top >= gameArea.clientHeight - 40) {
       clearInterval(timer);
-      startWriting(char);
     }
   }, 30);
 }
