@@ -3,9 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>生字挑戰模式 v6.2</title>
+<title>生字挑戰模式 v6.3</title>
 
-<!-- HanziWriter -->
 <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.5/dist/hanzi-writer.min.js"></script>
 
 <style>
@@ -25,8 +24,7 @@ header {
 
 #control-panel {
   text-align: center;
-  margin-bottom: 6px;
-  position: relative;
+  margin-bottom: 4px;
   z-index: 1000;
 }
 
@@ -44,7 +42,7 @@ select, button {
 
 #game-area {
   position: relative;
-  height: calc(100vh - 150px);
+  height: calc(100vh - 170px);
   border-top: 2px solid #ddd;
   overflow: hidden;
 }
@@ -98,7 +96,8 @@ select, button {
 </div>
 
 <div id="status-bar">
-  ❤️ 生命值：<span id="lives">3</span>
+  ❤️ 生命：<span id="lives">3</span>　
+  🧩 關卡：<span id="level">1</span>
 </div>
 
 <div id="game-area"></div>
@@ -109,89 +108,96 @@ select, button {
 
 <div id="message"></div>
 
-<!-- 音效（使用免費線上音效） -->
-<audio id="sound-correct" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
-<audio id="sound-wrong" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"></audio>
+<audio id="sound-ok" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
+<audio id="sound-ng" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"></audio>
 
 <script>
-/* ==============================
-   🔴 貼上你的 GAS_URL
-   ============================== */
+/* 🔴 GAS URL */
 const GAS_URL = "https://script.google.com/macros/s/AKfycbw7q7YMjF3a82-1NeNSV8kcc1j8u8PUv6PaEcb5rvnEWR_FZx-kUeaxchn3pbt1wazU/exec";
-/* ============================== */
+
+/* ===== 遊戲參數 ===== */
+const WORDS_PER_LEVEL = 5;
+let BASE_SPEED = 0.25;
 
 let allData = {};
-let wordsQueue = [];
-let fallingEl = null;
-let fallTimer = null;
-let writer = null;
-
+let allWords = [];
+let levelWords = [];
+let level = 1;
 let lives = 3;
-const FALL_SPEED = 0.25;
+
+let fallingEl, fallTimer, writer;
 
 /* ===== 音效 ===== */
-const sndCorrect = document.getElementById("sound-correct");
-const sndWrong = document.getElementById("sound-wrong");
+const okSound = document.getElementById("sound-ok");
+const ngSound = document.getElementById("sound-ng");
 
-/* ===== 讀取資料 ===== */
+/* ===== 載入資料 ===== */
 fetch(GAS_URL)
   .then(r => r.text())
   .then(txt => {
-    const jsonText = txt.substring(txt.indexOf("{"));
-    allData = JSON.parse(jsonText);
+    const json = txt.substring(txt.indexOf("{"));
+    allData = JSON.parse(json);
 
     const sel = document.getElementById("gradeSelect");
     Object.keys(allData).forEach(g => {
-      const opt = document.createElement("option");
-      opt.value = g;
-      opt.textContent = g;
-      sel.appendChild(opt);
+      const o = document.createElement("option");
+      o.value = g;
+      o.textContent = g;
+      sel.appendChild(o);
     });
-  })
-  .catch(err => {
-    alert("❌ 資料讀取失敗\n" + err.message);
   });
 
-/* ===== 開始遊戲 ===== */
 function startGame() {
-  resetGame();
+  resetAll();
 
-  const grade = document.getElementById("gradeSelect").value;
-  if (!grade) {
-    alert("請先選擇年級");
-    return;
-  }
+  const grade = gradeSelect.value;
+  if (!grade) return alert("請選擇年級");
 
-  allData[grade].forEach(row => {
-    if (row["生字"]) {
-      row["生字"].split("").forEach(ch => {
-        if (/[\u4e00-\u9fa5]/.test(ch)) {
-          wordsQueue.push(ch);
-        }
+  allData[grade].forEach(r => {
+    if (r["生字"]) {
+      r["生字"].split("").forEach(c => {
+        if (/[\u4e00-\u9fa5]/.test(c)) allWords.push(c);
       });
     }
   });
 
-  shuffle(wordsQueue);
-  nextWord();
+  shuffle(allWords);
+  startLevel();
 }
 
-/* ===== 下一題 ===== */
-function nextWord() {
-  clearWriter();
+/* ===== 關卡 ===== */
+function startLevel() {
+  document.getElementById("level").textContent = level;
+  levelWords = allWords.splice(0, WORDS_PER_LEVEL);
 
-  if (wordsQueue.length === 0) {
-    showMessage("🎉 全部完成，做得好！");
+  if (levelWords.length === 0) {
+    showMessage("🎉 全部通關！");
     return;
   }
 
-  spawnFallingChar(wordsQueue.shift());
+  nextWord();
+}
+
+function nextWord() {
+  clearWriter();
+
+  if (levelWords.length === 0) {
+    level++;
+    BASE_SPEED += 0.05;
+    showMessage("✨ 過關！");
+    setTimeout(() => {
+      hideMessage();
+      startLevel();
+    }, 1200);
+    return;
+  }
+
+  spawnWord(levelWords.shift());
 }
 
 /* ===== 掉字 ===== */
-function spawnFallingChar(char) {
+function spawnWord(char) {
   const area = document.getElementById("game-area");
-
   fallingEl = document.createElement("div");
   fallingEl.className = "falling-word";
   fallingEl.textContent = char;
@@ -201,7 +207,7 @@ function spawnFallingChar(char) {
 
   let top = 0;
   fallTimer = setInterval(() => {
-    top += FALL_SPEED;
+    top += BASE_SPEED;
     fallingEl.style.top = top + "px";
 
     if (top > area.clientHeight) {
@@ -220,18 +226,15 @@ function createWriter(char) {
     height: 170,
     padding: 5,
     showOutline: true,
-    drawingWidth: 14,
-    showHintAfterMisses: 1
+    drawingWidth: 14
   });
 
   writer.quiz({
     onComplete: () => {
-      sndCorrect.currentTime = 0;
-      sndCorrect.play();
-
+      okSound.play();
       clearInterval(fallTimer);
       fallingEl.remove();
-      setTimeout(nextWord, 400);
+      setTimeout(nextWord, 300);
     }
   });
 }
@@ -240,50 +243,47 @@ function clearWriter() {
   if (writer) {
     writer.cancelQuiz();
     writer = null;
-    document.getElementById("hanzi-target").innerHTML = "";
+    hanziTarget.innerHTML = "";
   }
 }
 
-/* ===== 生命值 ===== */
+/* ===== 生命 ===== */
 function loseLife() {
   lives--;
-  sndWrong.currentTime = 0;
-  sndWrong.play();
-
-  document.getElementById("lives").textContent = lives;
-
-  if (lives <= 0) {
-    gameOver();
-  }
-}
-
-function resetGame() {
-  lives = 3;
-  wordsQueue = [];
-  document.getElementById("lives").textContent = lives;
-  document.getElementById("message").style.display = "none";
-  clearInterval(fallTimer);
-  if (fallingEl) fallingEl.remove();
-  clearWriter();
+  ngSound.play();
+  livesSpan.textContent = lives;
+  if (lives <= 0) gameOver();
 }
 
 function gameOver() {
-  showMessage("💔 挑戰失敗，再試一次！");
   clearInterval(fallTimer);
+  showMessage("💔 遊戲結束");
 }
 
 /* ===== 工具 ===== */
-function shuffle(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
+function resetAll() {
+  allWords = [];
+  level = 1;
+  lives = 3;
+  BASE_SPEED = 0.25;
+  livesSpan.textContent = lives;
+  levelSpan.textContent = level;
+  hideMessage();
+}
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
+    [a[i], a[j]] = [a[j], a[i]];
   }
 }
 
-function showMessage(text) {
-  const msg = document.getElementById("message");
-  msg.textContent = text;
-  msg.style.display = "block";
+function showMessage(t) {
+  message.textContent = t;
+  message.style.display = "block";
+}
+function hideMessage() {
+  message.style.display = "none";
 }
 </script>
 
