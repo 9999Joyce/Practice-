@@ -1,15 +1,18 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>生字挑戰模式</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>生字挑戰模式 v6.1</title>
+
+<!-- ✅ HanziWriter（一定要有） -->
+<script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.5/dist/hanzi-writer.min.js"></script>
 
 <style>
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI";
-  background: #f5f7fb;
+  font-family: "Microsoft JhengHei", system-ui;
+  background: #f4f7fb;
   overflow: hidden;
 }
 
@@ -22,7 +25,9 @@ header {
 
 #control-panel {
   text-align: center;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
+  z-index: 1000;
+  position: relative;
 }
 
 select, button {
@@ -35,6 +40,7 @@ select, button {
   position: relative;
   height: calc(100vh - 120px);
   border-top: 2px solid #ddd;
+  overflow: hidden;
 }
 
 .falling-word {
@@ -50,13 +56,14 @@ select, button {
   position: fixed;
   right: 10px;
   bottom: 10px;
-  width: 160px;
-  height: 160px;
-  border: 2px dashed #999;
+  width: 170px;
+  height: 170px;
   background: white;
+  border: 2px solid #999;
+  border-radius: 10px;
 }
 
-canvas {
+#hanzi-target {
   width: 100%;
   height: 100%;
 }
@@ -87,52 +94,44 @@ canvas {
 <div id="game-area"></div>
 
 <div id="write-area">
-  <canvas id="canvas"></canvas>
+  <div id="hanzi-target"></div>
 </div>
 
 <div id="message"></div>
 
 <script>
-/* ==============================
-   ❶ 貼上你的 GAS Web App URL
-   ============================== */
+/* =================================================
+   🔴【唯一要改的地方】貼上你的 GAS Web App URL
+   ================================================= */
 const GAS_URL = "https://script.google.com/macros/s/AKfycbw7q7YMjF3a82-1NeNSV8kcc1j8u8PUv6PaEcb5rvnEWR_FZx-kUeaxchn3pbt1wazU/exec";
-
-/* ============================== */
+/* ================================================= */
 
 let allData = {};
 let wordsQueue = [];
-let currentWord = null;
+let currentChar = "";
 let fallingEl = null;
 let fallTimer = null;
-let speed = 0.3; // 已調慢，手機也能寫
+let writer = null;
 
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
-resizeCanvas();
+const FALL_SPEED = 0.25; // ✔ 已為手機調慢（比原本慢 3 倍）
 
-window.addEventListener("resize", resizeCanvas);
-
-function resizeCanvas() {
-  canvas.width = canvas.offsetWidth;
-  canvas.height = canvas.offsetHeight;
-}
-
-/* ===== 載入資料 ===== */
+/* ===== 讀取 GAS JSON（手機/電腦通用）===== */
 fetch(GAS_URL)
-  .then(r => r.json())
-  .then(data => {
-    allData = data;
-    const select = document.getElementById("gradeSelect");
-    Object.keys(allData).forEach(g => {
+  .then(res => res.text())
+  .then(txt => {
+    const jsonText = txt.substring(txt.indexOf("{"));
+    allData = JSON.parse(jsonText);
+
+    const sel = document.getElementById("gradeSelect");
+    Object.keys(allData).forEach(grade => {
       const opt = document.createElement("option");
-      opt.value = g;
-      opt.textContent = g;
-      select.appendChild(opt);
+      opt.value = grade;
+      opt.textContent = grade;
+      sel.appendChild(opt);
     });
   })
-  .catch(() => {
-    alert("資料讀取失敗");
+  .catch(err => {
+    alert("❌ 資料讀取或解析失敗\n" + err.message);
   });
 
 /* ===== 開始遊戲 ===== */
@@ -145,37 +144,51 @@ function startGame() {
     return;
   }
 
-  wordsQueue = [...allData[grade]];
+  // 將該年級所有生字收集成陣列
+  wordsQueue = [];
+  allData[grade].forEach(row => {
+    if (row["生字"]) {
+      row["生字"].split("").forEach(ch => {
+        if (/[\u4e00-\u9fa5]/.test(ch)) {
+          wordsQueue.push(ch);
+        }
+      });
+    }
+  });
+
   shuffle(wordsQueue);
   nextWord();
 }
 
 /* ===== 出下一題 ===== */
 function nextWord() {
-  clearCanvas();
+  clearWriter();
 
   if (wordsQueue.length === 0) {
     showMessage("🎉 全部完成，做得好！");
     return;
   }
 
-  currentWord = wordsQueue.shift().生字;
-  spawnWord(currentWord);
+  currentChar = wordsQueue.shift();
+  spawnFallingChar(currentChar);
+  createWriter(currentChar);
 }
 
-/* ===== 掉字 ===== */
-function spawnWord(char) {
+/* ===== 掉落文字 ===== */
+function spawnFallingChar(char) {
+  const area = document.getElementById("game-area");
+
   fallingEl = document.createElement("div");
   fallingEl.className = "falling-word";
   fallingEl.textContent = char;
-  document.getElementById("game-area").appendChild(fallingEl);
+  area.appendChild(fallingEl);
 
   let top = 0;
   fallTimer = setInterval(() => {
-    top += speed;
+    top += FALL_SPEED;
     fallingEl.style.top = top + "px";
 
-    if (top > window.innerHeight) {
+    if (top > area.clientHeight) {
       clearInterval(fallTimer);
       fallingEl.remove();
       nextWord();
@@ -183,42 +196,40 @@ function spawnWord(char) {
   }, 16);
 }
 
-/* ===== 繪圖區 ===== */
-let drawing = false;
+/* ===== HanziWriter 九宮格 ===== */
+function createWriter(char) {
+  writer = HanziWriter.create("hanzi-target", char, {
+    width: 170,
+    height: 170,
+    padding: 5,
+    showOutline: true,
+    drawingWidth: 14,
+    showHintAfterMisses: 1,
+    strokeAnimationSpeed: 1
+  });
 
-canvas.addEventListener("pointerdown", e => {
-  drawing = true;
-  ctx.beginPath();
-  ctx.moveTo(e.offsetX, e.offsetY);
-});
-
-canvas.addEventListener("pointermove", e => {
-  if (!drawing) return;
-  ctx.lineTo(e.offsetX, e.offsetY);
-  ctx.stroke();
-});
-
-canvas.addEventListener("pointerup", finishDraw);
-canvas.addEventListener("pointerleave", finishDraw);
-
-function finishDraw() {
-  if (!drawing) return;
-  drawing = false;
-
-  // 暫時用「有寫就算成功」
-  clearInterval(fallTimer);
-  fallingEl.remove();
-  setTimeout(nextWord, 400);
+  writer.quiz({
+    onComplete: () => {
+      clearInterval(fallTimer);
+      if (fallingEl) fallingEl.remove();
+      setTimeout(nextWord, 400);
+    }
+  });
 }
 
-function clearCanvas() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+function clearWriter() {
+  if (writer) {
+    writer.cancelQuiz();
+    writer = null;
+    document.getElementById("hanzi-target").innerHTML = "";
+  }
 }
 
+/* ===== 清場 ===== */
 function clearGame() {
   clearInterval(fallTimer);
   if (fallingEl) fallingEl.remove();
-  clearCanvas();
+  clearWriter();
   document.getElementById("message").style.display = "none";
 }
 
