@@ -135,15 +135,13 @@ async function loadData() {
     const res = await fetch(GAS_URL + "?t=" + Date.now());
     const json = await res.json();
 
-    allData = {};
-    json.forEach(r => {
-      const grade = r["孩子"];
-      const char = r["生字"];
-      if (!grade || !char) return;
+allData = {};
 
-      if (!allData[grade]) allData[grade] = [];
-      allData[grade].push(char);
-    });
+Object.keys(json).forEach(grade => {
+  allData[grade] = json[grade]
+    .map(row => row["生字"])
+    .filter(Boolean);
+});
 
     const select = document.getElementById("gradeSelect");
     select.innerHTML = `<option value="">請選擇年級</option>`;
