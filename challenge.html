@@ -22,7 +22,6 @@ header {
 }
 #control-panel {
   text-align: center;
-  margin-bottom: 4px;
 }
 select, button {
   font-size: 16px;
@@ -86,8 +85,8 @@ select, button {
 </div>
 
 <div id="status-bar">
-  ❤️ 生命：<span id="lives">3</span>　
-  🧩 關卡：<span id="level">1</span>
+  ❤️ <span id="lives">3</span>
+  ｜ 🧩 第 <span id="level">1</span> 關
 </div>
 
 <div id="game-area"></div>
@@ -98,8 +97,8 @@ select, button {
 
 <div id="message"></div>
 
-<audio id="sound-ok" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
-<audio id="sound-ng" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"></audio>
+<audio id="okSound" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
+<audio id="ngSound" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"></audio>
 
 <script>
 const GAS_URL = "https://script.google.com/macros/s/AKfycbw7q7YMjF3a82-1NeNSV8kcc1j8u8PUv6PaEcb5rvnEWR_FZx-kUeaxchn3pbt1wazU/exec";
@@ -107,136 +106,4 @@ const GAS_URL = "https://script.google.com/macros/s/AKfycbw7q7YMjF3a82-1NeNSV8kc
 const WORDS_PER_LEVEL = 5;
 let BASE_SPEED = 0.25;
 
-let allData = {}, allWords = [], levelWords = [];
-let level = 1, lives = 3;
-let fallingEl, fallTimer, writer;
-
-const livesSpan = document.getElementById("lives");
-const levelSpan = document.getElementById("level");
-const okSound = document.getElementById("sound-ok");
-const ngSound = document.getElementById("sound-ng");
-
-fetch(GAS_URL)
-  .then(r => r.text())
-  .then(txt => {
-    const json = txt.substring(txt.indexOf("{"));
-    allData = JSON.parse(json);
-    Object.keys(allData).forEach(g => {
-      const o = document.createElement("option");
-      o.value = g;
-      o.textContent = g;
-      gradeSelect.appendChild(o);
-    });
-  });
-
-function startGame() {
-  resetAll();
-  const grade = gradeSelect.value;
-  if (!grade) return alert("請選擇年級");
-
-  allData[grade].forEach(r => {
-    if (r["生字"]) {
-      r["生字"].split("").forEach(c => {
-        if (/[\u4e00-\u9fa5]/.test(c)) allWords.push(c);
-      });
-    }
-  });
-
-  shuffle(allWords);
-  startLevel();
-}
-
-function startLevel() {
-  levelSpan.textContent = level;
-  levelWords = allWords.splice(0, WORDS_PER_LEVEL);
-  if (levelWords.length === 0) return showMessage("🎉 全部通關！");
-  nextWord();
-}
-
-function nextWord() {
-  clearWriter();
-  if (levelWords.length === 0) {
-    level++;
-    BASE_SPEED += 0.05;
-    showMessage("✨ 過關！");
-    return setTimeout(() => { hideMessage(); startLevel(); }, 1200);
-  }
-  spawnWord(levelWords.shift());
-}
-
-function spawnWord(char) {
-  const area = document.getElementById("game-area");
-  fallingEl = document.createElement("div");
-  fallingEl.className = "falling-word";
-  fallingEl.textContent = char;
-  area.appendChild(fallingEl);
-  createWriter(char);
-
-  let top = 0;
-  fallTimer = setInterval(() => {
-    top += BASE_SPEED;
-    fallingEl.style.top = top + "px";
-    if (top > area.clientHeight) {
-      clearInterval(fallTimer);
-      fallingEl.remove();
-      loseLife();
-      nextWord();
-    }
-  }, 16);
-}
-
-function createWriter(char) {
-  writer = HanziWriter.create("hanzi-target", char, {
-    width: 170, height: 170, padding: 5, showOutline: true, drawingWidth: 14
-  });
-  writer.quiz({
-    onComplete: () => {
-      okSound.play();
-      clearInterval(fallTimer);
-      fallingEl.remove();
-      setTimeout(nextWord, 300);
-    }
-  });
-}
-
-function clearWriter() {
-  if (writer) {
-    writer.cancelQuiz();
-    writer = null;
-    hanziTarget.innerHTML = "";
-  }
-}
-
-function loseLife() {
-  lives--;
-  ngSound.play();
-  livesSpan.textContent = lives;
-  if (lives <= 0) showMessage("💔 遊戲結束");
-}
-
-function resetAll() {
-  allWords = [];
-  level = 1;
-  lives = 3;
-  BASE_SPEED = 0.25;
-  livesSpan.textContent = lives;
-  levelSpan.textContent = level;
-  hideMessage();
-}
-
-function shuffle(a) {
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-}
-function showMessage(t) {
-  message.textContent = t;
-  message.style.display = "block";
-}
-function hideMessage() {
-  message.style.display = "none";
-}
-</script>
-</body>
-</html>
+let allData = {};
