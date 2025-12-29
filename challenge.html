@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>生字挑戰模式 v6.3</title>
 
+<!-- Hanzi Writer -->
 <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.5/dist/hanzi-writer.min.js"></script>
 
 <style>
@@ -12,33 +13,39 @@ body {
   margin: 0;
   font-family: "Microsoft JhengHei", system-ui;
   background: #f4f7fb;
-  overflow: hidden;
 }
+
 header {
   text-align: center;
   padding: 10px;
   font-size: 20px;
   font-weight: bold;
 }
+
 #control-panel {
   text-align: center;
+  margin-bottom: 6px;
 }
+
 select, button {
   font-size: 16px;
   padding: 6px 12px;
   margin: 4px;
 }
+
 #status-bar {
   text-align: center;
   font-size: 18px;
   margin-bottom: 4px;
 }
+
 #game-area {
   position: relative;
-  height: calc(100vh - 170px);
+  height: 50vh;
   border-top: 2px solid #ddd;
   overflow: hidden;
 }
+
 .falling-word {
   position: absolute;
   top: 0;
@@ -47,6 +54,7 @@ select, button {
   left: 50%;
   transform: translateX(-50%);
 }
+
 #write-area {
   position: fixed;
   right: 10px;
@@ -56,11 +64,14 @@ select, button {
   background: white;
   border: 2px solid #999;
   border-radius: 10px;
+  z-index: 1000;
 }
+
 #hanzi-target {
   width: 100%;
   height: 100%;
 }
+
 #message {
   position: fixed;
   top: 45%;
@@ -70,26 +81,6 @@ select, button {
   font-weight: bold;
   display: none;
 }
-#control-panel {
-  position: relative;
-  z-index: 2000;
-}
-
-header {
-  position: relative;
-  z-index: 2000;
-}
-#game-area {
-  pointer-events: none;
-}
-#write-area {
-  pointer-events: auto;
-}
-
-#control-panel, header {
-  pointer-events: auto;
-}
-
 </style>
 </head>
 
@@ -101,7 +92,7 @@ header {
   <select id="gradeSelect">
     <option value="">請選擇年級</option>
   </select>
-  <button onclick="startGame()">開始挑戰</button>
+  <button id="startBtn">開始挑戰</button>
 </div>
 
 <div id="status-bar">
@@ -117,13 +108,137 @@ header {
 
 <div id="message"></div>
 
+<!-- 音效 -->
 <audio id="okSound" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
 <audio id="ngSound" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"></audio>
 
 <script>
+/* ====== 設定區 ====== */
 const GAS_URL = "https://script.google.com/macros/s/AKfycbw7q7YMjF3a82-1NeNSV8kcc1j8u8PUv6PaEcb5rvnEWR_FZx-kUeaxchn3pbt1wazU/exec";
-
 const WORDS_PER_LEVEL = 5;
-let BASE_SPEED = 0.25;
+const BASE_SPEED = 0.25;
 
+/* ====== 狀態 ====== */
 let allData = {};
+let words = [];
+let currentIndex = 0;
+let currentChar = "";
+let writer = null;
+
+/* ====== 初始化 ====== */
+document.getElementById("startBtn").addEventListener("click", startGame);
+loadData();
+
+/* ====== 資料載入 ====== */
+async function loadData() {
+  try {
+    const res = await fetch(GAS_URL + "?t=" + Date.now());
+    const json = await res.json();
+
+    allData = {};
+    json.forEach(r => {
+      const grade = r["孩子"];
+      const char = r["生字"];
+      if (!grade || !char) return;
+
+      if (!allData[grade]) allData[grade] = [];
+      allData[grade].push(char);
+    });
+
+    const select = document.getElementById("gradeSelect");
+    select.innerHTML = `<option value="">請選擇年級</option>`;
+    Object.keys(allData).forEach(g => {
+      select.innerHTML += `<option value="${g}">${g}</option>`;
+    });
+  } catch (e) {
+    alert("❌ 資料讀取失敗");
+    console.error(e);
+  }
+}
+
+/* ====== 開始遊戲 ====== */
+function startGame() {
+  const grade = gradeSelect.value;
+  if (!grade) {
+    alert("請先選擇年級");
+    return;
+  }
+
+  words = [...allData[grade]];
+  shuffle(words);
+
+  currentIndex = 0;
+  document.getElementById("message").style.display = "none";
+  nextWord();
+}
+
+/* ====== 下一字 ====== */
+function nextWord() {
+  if (currentIndex >= words.length) {
+    showMessage("🎉 全部完成，做得好！");
+    return;
+  }
+
+  currentChar = words[currentIndex++];
+  dropWord(currentChar);
+}
+
+/* ====== 掉落動畫 ====== */
+function dropWord(char) {
+  const gameArea = document.getElementById("game-area");
+  gameArea.innerHTML = "";
+
+  const div = document.createElement("div");
+  div.className = "falling-word";
+  div.textContent = char;
+  gameArea.appendChild(div);
+
+  let top = 0;
+  const timer = setInterval(() => {
+    top += BASE_SPEED * 10;
+    div.style.top = top + "px";
+
+    if (top >= gameArea.clientHeight - 40) {
+      clearInterval(timer);
+      startWriting(char);
+    }
+  }, 30);
+}
+
+/* ====== 書寫 ====== */
+function startWriting(char) {
+  document.getElementById("hanzi-target").innerHTML = "";
+
+  writer = HanziWriter.create("hanzi-target", char, {
+    width: 170,
+    height: 170,
+    showOutline: true,
+    showCharacter: false,
+    strokeAnimationSpeed: 1,
+    delayBetweenStrokes: 200,
+    onComplete() {
+      document.getElementById("okSound").play();
+      setTimeout(nextWord, 400);
+    }
+  });
+
+  writer.quiz();
+}
+
+/* ====== 工具 ====== */
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+function showMessage(msg) {
+  const m = document.getElementById("message");
+  m.textContent = msg;
+  m.style.display = "block";
+}
+</script>
+
+</body>
+</html>
