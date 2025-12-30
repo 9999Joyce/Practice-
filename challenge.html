@@ -117,7 +117,7 @@ select, button {
 /* ====== 設定區 ====== */
 const GAS_URL = "https://script.google.com/macros/s/AKfycbw7q7YMjF3a82-1NeNSV8kcc1j8u8PUv6PaEcb5rvnEWR_FZx-kUeaxchn3pbt1wazU/exec";
 const WORDS_PER_LEVEL = 5;
-const BASE_SPEED = 0.25;
+const BASE_SPEED = 0.2;
 
 /* ====== 狀態 ====== */
 let allData = {};
@@ -223,8 +223,8 @@ function startWriting(char) {
   document.getElementById("hanzi-target").innerHTML = "";
 
   writer = HanziWriter.create("hanzi-target", char, {
-    width: 170,
-    height: 170,
+    width: 200,
+    height: 200,
     padding: 5,
     showOutline: true
   });
